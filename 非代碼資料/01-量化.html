@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文件一 · 量化 · Candle 量化與微調</title>
+<style>
+:root{
+  --bg:#0f1115; --bg2:#151821; --bg3:#1b1f2a;
+  --fg:#dfe3ea; --fg-dim:#9aa3b2; --fg-faint:#6b7382;
+  --line:#252a36; --line2:#323a4a;
+  --accent:#7aa2f7; --accent2:#bb9af7; --ok:#9ece6a; --warn:#e0af68; --bad:#f7768e;
+  --code-bg:#12151c;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:16px; line-height:1.75; letter-spacing:.01em;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* 頂欄 */
+.top{
+  position:sticky; top:0; z-index:50; height:52px;
+  display:flex; align-items:center; gap:18px; padding:0 22px;
+  background:rgba(15,17,21,.88); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.top .brand{font-weight:700;font-size:14px;color:var(--fg);white-space:nowrap}
+.top .brand span{color:var(--accent)}
+.top nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+.top nav a{
+  font-size:13px;padding:6px 12px;border-radius:7px;color:var(--fg-dim);
+  white-space:nowrap;
+}
+.top nav a:hover{background:var(--bg3);color:var(--fg);text-decoration:none}
+.top nav a.on{background:var(--accent);color:#0b0e14;font-weight:600}
+
+/* 版面 */
+.wrap{display:grid;grid-template-columns:266px minmax(0,1fr);gap:0;max-width:1420px;margin:0 auto}
+aside{
+  position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;
+  padding:26px 14px 60px 22px;border-right:1px solid var(--line);
+}
+aside::-webkit-scrollbar{width:7px}
+aside::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+aside .toc-title{font-size:11px;letter-spacing:.16em;color:var(--fg-faint);
+  text-transform:uppercase;margin:0 0 12px 10px}
+aside ul{list-style:none;margin:0;padding:0}
+aside ul ul{margin-left:12px}
+aside li{margin:1px 0}
+aside a{
+  display:block;padding:5px 10px;border-radius:6px;font-size:13.5px;
+  color:var(--fg-dim);line-height:1.45;border-left:2px solid transparent;
+}
+aside a:hover{background:var(--bg3);color:var(--fg);text-decoration:none}
+aside a.active{color:var(--accent);background:rgba(122,162,247,.09);
+  border-left-color:var(--accent);font-weight:600}
+aside ul ul a{font-size:12.5px;color:var(--fg-faint)}
+
+main{padding:34px 46px 120px;min-width:0}
+article{max-width:860px}
+
+/* 標題 */
+article h1{
+  font-size:2.05rem;line-height:1.3;margin:0 0 8px;letter-spacing:-.02em;
+  background:linear-gradient(92deg,#dfe3ea,#9fb4e8);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+article h2{
+  font-size:1.42rem;margin:2.6em 0 .8em;padding-bottom:.42em;
+  border-bottom:1px solid var(--line);letter-spacing:-.01em;scroll-margin-top:72px;
+}
+article h3{font-size:1.12rem;margin:2em 0 .6em;color:#c8d2e4;scroll-margin-top:72px}
+article h4{font-size:1rem;margin:1.6em 0 .5em;color:var(--fg-dim);scroll-margin-top:72px}
+article h2::before{content:"#";color:var(--accent);opacity:.5;margin-right:9px;font-weight:400}
+article h3::before{content:"##";color:var(--accent2);opacity:.4;margin-right:8px;font-weight:400;font-size:.85em}
+
+/* 段落與清單 */
+article p{margin:.9em 0}
+article ul,article ol{padding-left:1.5em;margin:.8em 0}
+article li{margin:.34em 0}
+article li::marker{color:var(--accent)}
+article strong{color:#fff;font-weight:650}
+article em{color:var(--accent2);font-style:normal}
+
+/* 引用 */
+blockquote{
+  margin:1.3em 0;padding:14px 18px;border-radius:9px;
+  background:var(--bg2);border-left:3px solid var(--accent2);
+  color:#c3cbd9;font-size:.94em;
+}
+blockquote p{margin:.4em 0}
+blockquote strong{color:#e6c9ff}
+
+/* 表格 */
+.table-scroll{overflow-x:auto;margin:1.4em 0;border-radius:9px;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--line)}
+th{background:var(--bg3);color:#cfd7e6;font-weight:600;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(122,162,247,.045)}
+td code{white-space:nowrap}
+
+/* 行內程式碼 */
+code{
+  font-family:"JetBrains Mono","Cascadia Code",Consolas,"Courier New",monospace;
+  font-size:.875em;background:var(--code-bg);color:#e3b4a0;
+  padding:2px 6px;border-radius:5px;border:1px solid var(--line);
+}
+/* 程式碼區塊 */
+.codeblock{position:relative;margin:1.3em 0;border-radius:10px;overflow:hidden;
+  border:1px solid var(--line);background:var(--code-bg)}
+.codeblock .bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 13px;background:#161a23;border-bottom:1px solid var(--line);
+  font-size:11.5px;letter-spacing:.06em;color:var(--fg-faint);text-transform:uppercase;
+}
+.codeblock .copy{
+  background:transparent;border:1px solid var(--line2);color:var(--fg-dim);
+  font-size:11px;padding:3px 10px;border-radius:5px;cursor:pointer;
+  font-family:inherit;transition:.15s;text-transform:none;letter-spacing:0;
+}
+.codeblock .copy:hover{background:var(--accent);color:#0b0e14;border-color:var(--accent)}
+.codeblock .copy.done{background:var(--ok);color:#0b0e14;border-color:var(--ok)}
+.codeblock pre{margin:0;padding:15px 17px;overflow-x:auto}
+.codeblock pre code{
+  background:none;border:none;padding:0;font-size:13px;line-height:1.62;
+  color:#cdd6e4;white-space:pre;
+}
+.codeblock pre::-webkit-scrollbar{height:8px}
+.codeblock pre::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+
+/* pygments 深色配色（自訂，不依賴外部 css） */
+.codeblock .k,.codeblock .kd,.codeblock .kn,.codeblock .kr,.codeblock .kt{color:#bb9af7}
+.codeblock .s,.codeblock .s1,.codeblock .s2,.codeblock .sd,.codeblock .sa{color:#9ece6a}
+.codeblock .c,.codeblock .c1,.codeblock .cm,.codeblock .cs{color:#5f6b80;font-style:italic}
+.codeblock .nf,.codeblock .fm{color:#7aa2f7}
+.codeblock .n,.codeblock .nn,.codeblock .nc{color:#cdd6e4}
+.codeblock .mi,.codeblock .mf,.codeblock .m{color:#ff9e64}
+.codeblock .o,.codeblock .ow{color:#89ddff}
+.codeblock .nb,.codeblock .bp{color:#2ac3de}
+.codeblock .nd{color:#e0af68}
+.codeblock .p{color:#8b95a8}
+
+/* 水平線 */
+article hr{border:none;border-top:1px solid var(--line);margin:2.6em 0}
+
+/* 頁尾導覽 */
+.pager{
+  display:flex;justify-content:space-between;gap:14px;margin-top:4em;
+  padding-top:2em;border-top:1px solid var(--line);flex-wrap:wrap;
+}
+.pager a{
+  padding:11px 18px;border:1px solid var(--line2);border-radius:9px;
+  font-size:13.5px;color:var(--fg-dim);background:var(--bg2);
+}
+.pager a:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+
+/* 回到頂端 */
+#totop{
+  position:fixed;right:26px;bottom:26px;width:40px;height:40px;border-radius:50%;
+  background:var(--bg3);border:1px solid var(--line2);color:var(--fg-dim);
+  cursor:pointer;font-size:16px;display:none;z-index:60;
+}
+#totop:hover{background:var(--accent);color:#0b0e14}
+#totop.show{display:block}
+
+/* 窄螢幕 */
+@media(max-width:1000px){
+  .wrap{grid-template-columns:1fr}
+  aside{display:none}
+  main{padding:24px 20px 90px}
+  article h1{font-size:1.62rem}
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand">Candle <span>量化 × 微調</span></div>
+  <nav><a href="index.html" class="">首頁</a>
+<a href="01-量化.html" class="on">文件一 · 量化</a>
+<a href="02-微調.html" class="">文件二 · 微調</a>
+<a href="03-整合.html" class="">文件三 · 整合</a></nav>
+</div>
+<div class="wrap">
+  <aside>
+    <p class="toc-title">從 safetensors 到 GGUF，全程 CPU</p>
+    <ul>
+<li><a href="#0-你的三份權重先算一筆帳">0. 你的三份權重，先算一筆帳</a>
+</li>
+<li><a href="#1-量化的數學一個區塊就是一個縮放係數">1. 量化的數學：一個區塊就是一個縮放係數</a>
+</li>
+<li><a href="#2-candle-的型別系統">2. candle 的型別系統</a>
+</li>
+<li><a href="#3-qtensor-實戰把誤差量出來">3. QTensor 實戰：把誤差量出來</a>
+</li>
+<li><a href="#4-離群值量化的真正敵人">4. 離群值：量化的真正敵人</a>
+</li>
+<li><a href="#5-qmatmul為什麼推論時不-dequant">5. QMatMul：為什麼推論時不 dequant</a>
+</li>
+<li><a href="#6-gguf-解剖拿你那份-29b-開刀">6. GGUF 解剖：拿你那份 2.9B 開刀</a>
+<ul>
+<li><a href="#gguf-的檔案佈局">GGUF 的檔案佈局</a></li>
+</ul>
+</li>
+<li><a href="#7-自己動手402-個張量-一個-gguf">7. 自己動手：402 個張量 → 一個 GGUF</a>
+<ul>
+<li><a href="#71-讀-safetensors">7.1 讀 safetensors</a></li>
+<li><a href="#72-決定每個張量的型別">7.2 決定每個張量的型別</a></li>
+<li><a href="#73-量化">7.3 量化</a></li>
+<li><a href="#74-組中繼資料">7.4 組中繼資料</a></li>
+<li><a href="#75-寫檔">7.5 寫檔</a></li>
+<li><a href="#76-實測結果">7.6 實測結果</a></li>
+</ul>
+</li>
+<li><a href="#8-三個坑">8. 三個坑</a>
+<ul>
+<li><a href="#坑一形狀-佈局k-quant-只認最後一維">坑一：形狀 ≠ 佈局，K-quant 只認最後一維</a></li>
+<li><a href="#坑二張量名稱是方言不是標準">坑二：張量名稱是方言，不是標準</a></li>
+<li><a href="#坑三缺詞表">坑三：缺詞表</a></li>
+</ul>
+</li>
+<li><a href="#9-與-deepseekqwen-的連線">9. 與 DeepSeek、Qwen 的連線</a>
+<ul>
+<li><a href="#qwen-的-gqa為什麼量化收益跟-llama-不一樣">Qwen 的 GQA：為什麼量化收益跟 Llama 不一樣</a></li>
+<li><a href="#deepseek-的-moe量化難點在每個-expert-都很小">DeepSeek 的 MoE：量化難點在「每個 expert 都很小」</a></li>
+<li><a href="#imatrix把位元花在刀口上">imatrix：把位元花在刀口上</a></li>
+</ul>
+</li>
+<li><a href="#10-練習">10. 練習</a>
+</li>
+</ul>
+  </aside>
+  <main>
+    <article>
+<h1 id="文件一量化-從-safetensors-到-gguf全程-cpu">文件一：量化 — 從 safetensors 到 GGUF，全程 CPU</h1>
+<blockquote>
+<p><strong>這份文件解決什麼問題</strong></p>
+<p>你手上有三份 RWKV-7 權重，格式各不相同：兩份 BF16 safetensors、一份別人量化好的 Q8_0 GGUF。
+這份文件帶你把第一種<strong>自己動手</strong>變成第二種，並且在過程中搞清楚每個位元組去了哪裡。</p>
+<p><strong>硬體前提</strong>：i5-13420H / 16 GB / RTX 3050 6 GB。量化全程用 CPU，不需要 CUDA，
+<code>cargo build --release</code> 不用加任何 feature。</p>
+<p><strong>對應程式碼</strong>：<code>code/src/bin/01_qtensor_basics.rs</code>、<code>02_quantize_safetensors.rs</code>、<code>03_inspect_gguf.rs</code>
+本文所有數字都是實際跑出來的，不是估的。</p>
+</blockquote>
+<hr />
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#0-你的三份權重先算一筆帳">0. 你的三份權重，先算一筆帳</a></li>
+<li><a href="#1-量化的數學一個區塊就是一個縮放係數">1. 量化的數學：一個區塊就是一個縮放係數</a></li>
+<li><a href="#2-candle-的型別系統">2. candle 的型別系統</a></li>
+<li><a href="#3-qtensor-實戰把誤差量出來">3. QTensor 實戰：把誤差量出來</a></li>
+<li><a href="#4-離群值量化的真正敵人">4. 離群值：量化的真正敵人</a></li>
+<li><a href="#5-qmatmul為什麼推論時不-dequant">5. QMatMul：為什麼推論時不 dequant</a></li>
+<li><a href="#6-gguf-解剖拿你那份-29b-開刀">6. GGUF 解剖：拿你那份 2.9B 開刀</a></li>
+<li><a href="#7-自己動手402-個張量--一個-gguf">7. 自己動手：402 個張量 → 一個 GGUF</a></li>
+<li><a href="#8-三個坑">8. 三個坑</a></li>
+<li><a href="#9-與-deepseekqwen-的連線">9. 與 DeepSeek、Qwen 的連線</a></li>
+<li><a href="#10-練習">10. 練習</a></li>
+</ul>
+<hr />
+<h2 id="0-你的三份權重先算一筆帳">0. 你的三份權重，先算一筆帳</h2>
+<table>
+<thead>
+<tr>
+<th>檔案</th>
+<th>世代</th>
+<th>參數量</th>
+<th>隱藏維度</th>
+<th>層數</th>
+<th>格式</th>
+<th>大小</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rwkv7-g1d-0.1b-...safetensors</code></td>
+<td>g1d</td>
+<td>0.1B</td>
+<td>768</td>
+<td>12</td>
+<td>BF16</td>
+<td>364.5 MiB</td>
+</tr>
+<tr>
+<td><code>rwkv7-g1d-1.5b-...safetensors</code></td>
+<td>g1d</td>
+<td>1.5B</td>
+<td>2048</td>
+<td>24</td>
+<td>BF16</td>
+<td>2.85 GiB</td>
+</tr>
+<tr>
+<td><code>rwkv7-g1k-2.9b-Q8_0.gguf</code></td>
+<td>g1k</td>
+<td>2.9B</td>
+<td>2560</td>
+<td>32</td>
+<td>Q8_0</td>
+<td>3.03 GiB</td>
+</tr>
+</tbody>
+</table>
+<p>先注意一件事：<strong>0.1B 只有 364 MiB，不是 0.1 GB 的 100 倍關係</strong>。
+打開 safetensors 的表頭看，402 個張量裡最肥的兩個是：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>emb.weight    [65536, 768]   → 50.3M 參數
+head.weight   [65536, 768]   → 50.3M 參數
+</code></pre></div>
+
+<p>光這兩個就 100M，佔了 191M 總參數的 <strong>52.7%</strong>。這件事會在第七節變成一個具體的設計決策：
+詞嵌入與輸出頭到底該不該跟主體一起壓到 4 bit。</p>
+<hr />
+<h2 id="1-量化的數學一個區塊就是一個縮放係數">1. 量化的數學：一個區塊就是一個縮放係數</h2>
+<p>所有 GGUF 量化格式都是同一個套路的變形：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>把張量攤平 → 切成固定大小的區塊 → 每個區塊存「一個（或幾個）縮放係數 + 一堆低位元整數」
+</code></pre></div>
+
+<p>以 <strong>Q4_0</strong> 為例，一個區塊是 32 個數值：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>┌─────────┬──────────────────────────────────┐
+│  scale  │  32 個 4-bit 有號整數             │
+│  2 bytes│  16 bytes                        │
+└─────────┴──────────────────────────────────┘
+   總共 18 bytes / 32 個權重 = 4.5 bit/權重
+</code></pre></div>
+
+<p>還原公式：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>w[i] ≈ q[i] × scale
+</code></pre></div>
+
+<p><code>q[i]</code> 是 −8..7 的整數，<code>scale</code> 是 f16。量化時 <code>scale = max(|w|) / 7</code>，
+<code>q[i] = round(w[i] / scale)</code>。</p>
+<p><strong>關鍵在於「一個區塊」有多大。</strong> 如果整張張量只有一個 scale（per-tensor），
+一個離群值就能毀掉整張表；如果 32 個數值一個 scale，災情就只限於那 32 個。
+第四節會把這件事量出來。</p>
+<p>K-quant 系列（Q4_K 等）再進一步：256 個數值一個 super-block，裡面切 8 個子區塊，
+每個子區塊有自己的 6-bit 縮放，而 super-block 層級再存一組 f16 的 <code>d</code> 與 <code>dmin</code>。
+多這一層，同一個位元數下誤差就小一截。</p>
+<hr />
+<h2 id="2-candle-的型別系統">2. candle 的型別系統</h2>
+<p>candle 用 <code>GgmlDType</code> 這個 enum 表示所有量化格式，共 15 種。
+底下這張表是從 <code>candle-core/src/quantized/mod.rs</code> 對出來的，
+<code>code/src/lib.rs</code> 裡也維護了一份一模一樣的：</p>
+<table>
+<thead>
+<tr>
+<th>型別</th>
+<th>每區塊元素</th>
+<th>每區塊位元組</th>
+<th>位/權重</th>
+<th>GGUF 編號</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F32</td>
+<td>1</td>
+<td>4</td>
+<td>32.00</td>
+<td>0</td>
+</tr>
+<tr>
+<td>F16</td>
+<td>1</td>
+<td>2</td>
+<td>16.00</td>
+<td>1</td>
+</tr>
+<tr>
+<td>BF16</td>
+<td>1</td>
+<td>2</td>
+<td>16.00</td>
+<td><strong>30</strong></td>
+</tr>
+<tr>
+<td>Q4_0</td>
+<td>32</td>
+<td>18</td>
+<td>4.50</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Q4_1</td>
+<td>32</td>
+<td>20</td>
+<td>5.00</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Q5_0</td>
+<td>32</td>
+<td>22</td>
+<td>5.50</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Q5_1</td>
+<td>32</td>
+<td>24</td>
+<td>6.00</td>
+<td>7</td>
+</tr>
+<tr>
+<td>Q8_0</td>
+<td>32</td>
+<td>34</td>
+<td>8.50</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Q8_1</td>
+<td>32</td>
+<td>36</td>
+<td>9.00</td>
+<td>9</td>
+</tr>
+<tr>
+<td>Q2_K</td>
+<td>256</td>
+<td>84</td>
+<td>2.62</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Q3_K</td>
+<td>256</td>
+<td>110</td>
+<td>3.44</td>
+<td>11</td>
+</tr>
+<tr>
+<td>Q4_K</td>
+<td>256</td>
+<td>144</td>
+<td>4.50</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Q5_K</td>
+<td>256</td>
+<td>176</td>
+<td>5.50</td>
+<td>13</td>
+</tr>
+<tr>
+<td>Q6_K</td>
+<td>256</td>
+<td>210</td>
+<td>6.56</td>
+<td>14</td>
+</tr>
+<tr>
+<td>Q8_K</td>
+<td>256</td>
+<td>292</td>
+<td>9.12</td>
+<td>15</td>
+</tr>
+</tbody>
+</table>
+<p>三個容易踩到的點：</p>
+<ol>
+<li><strong>BF16 的編號是 30，不是 2。</strong> 這是 GGUF 後來才補的型別，編號沒跟著順序走。</li>
+<li><strong><code>Q4_0</code> 不是「4 bit」，是 4.5 bit。</strong> 那 0.5 就是每 32 個權重攤到的 2 bytes 縮放係數。
+   同理 Q8_0 是 8.5 而不是 8。</li>
+<li><strong>candle 沒有公開 <code>to_u32()</code>。</strong> 它是 <code>pub(crate)</code>，所以寫 GGUF 時型別編號要自己填。
+   這也是為什麼 <code>code/src/lib.rs</code> 要維護那張表。</li>
+</ol>
+<hr />
+<h2 id="3-qtensor-實戰把誤差量出來">3. QTensor 實戰：把誤差量出來</h2>
+<p><code>QTensor</code> 和 <code>Tensor</code> 是兩個完全不同的東西。<code>Tensor</code> 有 autograd、有 dtype、
+可以隨意 reshape；<code>QTensor</code> 只有形狀、量化型別、和一堆位元組，<strong>沒有梯度</strong>。
+這件事在文件三會變成一個大問題。</p>
+<blockquote>
+<p><strong>順帶一個坑</strong>：<code>Device::set_seed(42)</code> 在 CPU 後端會直接報錯
+（<code>cannot seed the CPU rng with set_seed</code>），所以 <code>Tensor::randn</code> 的結果每次都不一樣。
+文件要引用固定數字，就只能自己造一個確定性 PRNG——
+<code>01_qtensor_basics.rs</code> 裡用 20 行的 xorshift32 + Box-Muller 解決了這件事，
+順便讓你不用為了「可重現」去拉 <code>rand</code> 依賴。</p>
+</blockquote>
+<p>先看量化與反量化：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// 造一個 768×768 的常態分佈矩陣。768 是 0.1B 的 hidden_size，</span>
+<span class="c1">// 同時也是 Q4_0（32）與 Q4_K（256）的區塊大小的公倍數。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Tensor</span><span class="p">::</span><span class="n">randn</span><span class="p">(</span><span class="mi">0</span><span class="k">f32</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="k">f32</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="mi">768</span><span class="p">,</span><span class="w"> </span><span class="mi">768</span><span class="p">),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">dev</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c1">// 量化：Tensor → QTensor。內部會先轉 f32 再 flatten_all()，</span>
+<span class="c1">// 所以「形狀」只用來檢查能不能被 block_size 整除，真正的量化沿著攤平後的一維陣列切。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">qt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QTensor</span><span class="p">::</span><span class="n">quantize</span><span class="p">(</span><span class="o">&amp;</span><span class="n">w</span><span class="p">,</span><span class="w"> </span><span class="n">GgmlDType</span><span class="p">::</span><span class="n">Q4K</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c1">// 反量化：QTensor → Tensor。這一步是有損的，回來的不會等於原值。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">back</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qt</span><span class="p">.</span><span class="n">dequantize</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c1">// 實際佔用位元組 = 區塊數 × 每區塊位元組，不是元素數 × 位元。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qt</span><span class="p">.</span><span class="n">storage_size_in_bytes</span><span class="p">();</span>
+</code></pre></div>
+
+<p>實測（<code>cargo run --release --bin 01_qtensor_basics</code>，種子固定為 42，每次跑數字完全一致）：</p>
+<table>
+<thead>
+<tr>
+<th>型別</th>
+<th>大小</th>
+<th>位/權重</th>
+<th>壓縮比</th>
+<th>RMSE</th>
+<th>餘弦相似度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F32</td>
+<td>2.25 MiB</td>
+<td>32.00</td>
+<td>1.0x</td>
+<td>0.00000</td>
+<td>1.000000</td>
+</tr>
+<tr>
+<td>F16</td>
+<td>1.12 MiB</td>
+<td>16.00</td>
+<td>2.0x</td>
+<td>0.00021</td>
+<td>1.000002</td>
+</tr>
+<tr>
+<td>BF16</td>
+<td>1.12 MiB</td>
+<td>16.00</td>
+<td>2.0x</td>
+<td>0.00166</td>
+<td>0.999859</td>
+</tr>
+<tr>
+<td>Q4_0</td>
+<td>324 KiB</td>
+<td>4.50</td>
+<td>7.1x</td>
+<td>0.08590</td>
+<td>0.996448</td>
+</tr>
+<tr>
+<td>Q4_1</td>
+<td>360 KiB</td>
+<td>5.00</td>
+<td>6.4x</td>
+<td>0.07818</td>
+<td>0.997041</td>
+</tr>
+<tr>
+<td>Q5_0</td>
+<td>396 KiB</td>
+<td>5.50</td>
+<td>5.8x</td>
+<td>0.04270</td>
+<td>0.999125</td>
+</tr>
+<tr>
+<td>Q8_0</td>
+<td>612 KiB</td>
+<td>8.50</td>
+<td>3.8x</td>
+<td>0.00535</td>
+<td>0.999993</td>
+</tr>
+<tr>
+<td>Q2_K</td>
+<td>189 KiB</td>
+<td>2.62</td>
+<td>12.2x</td>
+<td>0.28998</td>
+<td>0.959120</td>
+</tr>
+<tr>
+<td>Q3_K</td>
+<td>247.5 KiB</td>
+<td>3.44</td>
+<td>9.3x</td>
+<td>0.15085</td>
+<td>0.988826</td>
+</tr>
+<tr>
+<td>Q4_K</td>
+<td>324 KiB</td>
+<td>4.50</td>
+<td>7.1x</td>
+<td>0.07447</td>
+<td>0.997288</td>
+</tr>
+<tr>
+<td>Q5_K</td>
+<td>396 KiB</td>
+<td>5.50</td>
+<td>5.8x</td>
+<td>0.03693</td>
+<td>0.999331</td>
+</tr>
+<tr>
+<td>Q6_K</td>
+<td>472.5 KiB</td>
+<td>6.56</td>
+<td>4.9x</td>
+<td>0.01834</td>
+<td>0.999835</td>
+</tr>
+<tr>
+<td>Q8_K</td>
+<td>657 KiB</td>
+<td>9.12</td>
+<td>3.5x</td>
+<td>0.00695</td>
+<td>0.999982</td>
+</tr>
+</tbody>
+</table>
+<p>怎麼讀這張表：</p>
+<ul>
+<li><strong>Q4_0 與 Q4_K 大小完全一樣（324 KiB），但 Q4_K 的 RMSE 低 13%</strong>（0.0745 vs 0.0859）。
+  同樣的位元數，K-quant 就是比較準，代價是解量化程式碼複雜得多、CPU 上稍慢。</li>
+<li><strong>Q2_K 的餘弦相似度掉到 0.959。</strong> 低於 0.99 就要小心了，這是「能跑但明顯變笨」的區間。</li>
+<li><strong>Q8_0 幾乎無損</strong>（RMSE 0.0054），所以它是「保底選項」：當你不確定某個張量能不能壓，
+  就留 Q8_0。</li>
+</ul>
+<blockquote>
+<p><strong>一個小陷阱</strong>：F16 那一列的餘弦相似度是 1.000002，<strong>大於 1</strong>。
+那不是量化出錯，是 f32 累加誤差（內積與兩個範數各自有捨入誤差）。
+真要嚴格比較時，把內積與範數都轉 f64 再算，或直接把結果 clamp 到 1.0。</p>
+</blockquote>
+<hr />
+<h2 id="4-離群值量化的真正敵人">4. 離群值：量化的真正敵人</h2>
+<p>第一節說「區塊大小決定災情範圍」。這句話值得用數字證明。</p>
+<p>實驗：把 768×768 矩陣的第 0 個元素從隨機值改成 <strong>100.0</strong>，然後分兩區量誤差。</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// 只看前 32 個元素（離群值所在的那一個 Q4_0 區塊）。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">bad</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rmse_of</span><span class="p">(</span><span class="o">&amp;</span><span class="n">flat</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">flat_back</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="c1">// 看其餘 589792 個「正常」權重有沒有被牽連。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rmse_of</span><span class="p">(</span><span class="o">&amp;</span><span class="n">flat</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">flat_back</span><span class="p">,</span><span class="w"> </span><span class="mi">32</span><span class="p">,</span><span class="w"> </span><span class="n">flat</span><span class="p">.</span><span class="n">len</span><span class="p">());</span>
+</code></pre></div>
+
+<p>實測：</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>離群區塊 RMSE</th>
+<th>其餘權重 RMSE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>per-tensor 4bit（無區塊）</td>
+<td>0.8996</td>
+<td><strong>0.9992</strong></td>
+</tr>
+<tr>
+<td>Q4_0（32 一組）</td>
+<td>0.8996</td>
+<td>0.0859</td>
+</tr>
+<tr>
+<td>Q4_K（256 一組，8 子區塊）</td>
+<td>0.8040</td>
+<td>0.0745</td>
+</tr>
+<tr>
+<td>Q8_0（32 一組，8 bit）</td>
+<td>0.2408</td>
+<td>0.0054</td>
+</tr>
+</tbody>
+</table>
+<p>這張表要讀出三件事，而且第三件跟直覺相反：</p>
+<p><strong>第一，per-tensor 與 Q4_0 在離群值那一欄一模一樣（都是 0.8996）。</strong>
+不是巧合。離群值就在第 0 個位置，它的區塊縮放係數必然等於「全域最大絕對值 ÷ 7」，
+兩種做法在那個區塊上是同一個算式。Q4_K 是 0.8040，好 11%，
+但那是「從毀掉變成毀得輕一點」——別把這 11% 誤讀成「Q4_K 能扛離群值」。
+<strong>4-bit 救不了離群值本身。</strong></p>
+<p><strong>第二，真正的傷害在「其餘權重」那一欄。</strong>
+per-tensor 是 0.9992——這個數字幾乎等於原始權重的標準差（我們造的是 N(0,1)）。
+意思是：<strong>正常權重全部被還原成 0</strong>。步進 100/7 ≈ 14.3，比 99% 的權重都大，
+四捨五入後全部歸零。這才是離群值最致命的地方：不是它自己失真，是它把其他 58 萬個權重一起抹平。</p>
+<p>換成 Q4_0，其餘權重立刻從 0.9992 掉到 0.0859，差 11.6 倍。
+這就是「區塊量化」的全部價值：把污染半徑從「整個張量」縮到「32 個權重」。
+以 0.1B 的 <code>ffn.value</code>（3072×768 = 235 萬個權重）來說，受災比例是 0.0014%。</p>
+<p><strong>第三，Q4_K 的優勢主要在「其餘權重」上</strong>（0.0745 vs 0.0859，好 13%），
+靠的是 8 個子區塊各自的 6-bit 縮放，讓正常權重那一側的解析度更細。
+它在離群區塊上只贏 11%，兩者都還是 0.8 量級——而原始權重的標準差是 1，
+意思是那個區塊基本上已經毀了。很多人把「Q4_K 品質比較好」誤解成「Q4_K 比較耐離群值」，其實不是。</p>
+<p>那要怎麼處理離群值？只有一條路：<strong>把它找出來，單獨給高精度</strong>。
+這就是下一節與第九節的主題。</p>
+<hr />
+<h2 id="5-qmatmul為什麼推論時不-dequant">5. QMatMul：為什麼推論時不 dequant</h2>
+<p>如果你每次前向都 <code>dequantize()</code> 再 <code>matmul()</code>，那量化只省了硬碟空間，沒省算力。
+真正的做法是 <code>QMatMul</code>：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="k">use</span><span class="w"> </span><span class="n">candle_core</span><span class="p">::</span><span class="n">quantized</span><span class="p">::</span><span class="n">QMatMul</span><span class="p">;</span>
+
+<span class="c1">// 把 QTensor 包成一個「可以 forward 的層」。注意它包的是 2D 矩陣。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">qmm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QMatMul</span><span class="p">::</span><span class="n">from_qtensor</span><span class="p">(</span><span class="n">qt</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c1">// 前向：內部走的是量化 GEMM——直接把 4-bit 整數載入向量暫存器，</span>
+<span class="c1">// 在暫存器裡乘加，不還原成 f32。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qmm</span><span class="p">.</span><span class="n">forward</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+
+<p>為什麼量化 GEMM 比較快？不是因為算得少，而是因為<strong>記憶體頻寬</strong>。
+矩陣乘法是記憶體受限（memory-bound）的操作：每算一次乘加要讀一個權重。
+Q4_K 把每個權重從 4 bytes 壓到 0.5625 bytes，等於同樣的頻寬能餵 7 倍的運算。
+在 3050 這種頻寬只有 192 GB/s 的行動 GPU 上，這個差距比算力差距有感得多。</p>
+<p><code>QMatMul</code> 還有兩個你以後會用到的東西：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// 詞嵌入查表：量化後的 embedding 不能直接 index_select，</span>
+<span class="c1">// 因為每個元素是半個位元組，索引不到「第 n 個權重」。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qt</span><span class="p">.</span><span class="n">embedding</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ids</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c1">// MoE 的 expert 路由：DeepSeek 那種架構會用到，見第九節。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qt</span><span class="p">.</span><span class="n">indexed_moe_forward</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">expert_ids</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="6-gguf-解剖拿你那份-29b-開刀">6. GGUF 解剖：拿你那份 2.9B 開刀</h2>
+<p><code>cargo run --release --bin 03_inspect_gguf</code> 的實測輸出（節錄）：</p>
+<div class="codehilite"><pre data-lang="rust"><span></span><code>檔案：rwkv7-g1k-2.9b-Q8_0.gguf
+大小：3.03 GiB
+
+【中繼資料】共 24 筆
+  general.architecture = String(&quot;rwkv7&quot;)
+  general.file_type = U32(7)              ← 7 = Q8_0
+  general.name = String(&quot;rwkv7-g1k-2.9b-20260930-ctx25600.pth&quot;)
+  general.quantization_version = U32(2)
+  rwkv7.attention.decay_lora_rank = U32(96)
+  rwkv7.attention.gate_lora_rank = U32(320)
+  rwkv7.attention.iclr_lora_rank = U32(96)
+  rwkv7.attention.value_residual_mix_lora_rank = U32(64)
+  rwkv7.block_count = U32(32)
+  rwkv7.context_length = U32(1048576)
+  rwkv7.embedding_length = U32(2560)
+  rwkv7.feed_forward_length = U32(10240)
+  rwkv7.wkv.head_size = U32(64)
+  tokenizer.ggml.tokens = [陣列，65536 項]
+
+【張量】共 902 個
+
+  型別分佈：
+    F16      192 個    150.31 MiB  (4.8%)
+    F32      516 個     65.98 MiB  (2.1%)
+    Q8_0     194 個      2.82 GiB  (93.0%)
+</code></pre></div>
+
+<p>四個值得停下來看的細節：</p>
+<ol>
+<li><strong>902 個張量，只有 194 個被量化。</strong> 其餘 708 個是 F16/F32——它們是 LayerNorm、
+   <code>x_r/x_w/x_k</code> 這類 1 維或 3 維參數。量化這些不但省不下空間，還會增加解量化開銷。</li>
+<li><strong>F32 有 516 個但只佔 66 MiB。</strong> 對照 F16 的 192 個佔 150 MiB——平均每個 F32 張量比 F16 小，
+   說明 F32 那批全是小張量（<code>w0</code>、<code>a0</code>、<code>v0</code>、<code>k_k</code> 這種 2560 維的向量）。</li>
+<li><strong><code>rwkv7.attention.gate_lora_rank = 320</code></strong>，但 0.1B 的 <code>g1</code> 只有 128 維。
+   這個欄位不能從 hidden_size 推，必須從權重形狀讀——candle 的 <code>infer_lora_dims()</code> 就是幹這個的。</li>
+<li><strong><code>general.file_type = 7</code> 對應 Q8_0</strong>，但檔案裡混了三種型別。
+   這個欄位只是「主要型別」的標籤，載入器不會拿它來決定每個張量怎麼解。</li>
+</ol>
+<h3 id="gguf-的檔案佈局">GGUF 的檔案佈局</h3>
+<div class="codehilite"><pre data-lang="text"><span></span><code>┌────────────────────────────────────┐
+│ magic  &quot;GGUF&quot;            4 bytes   │
+│ version  u32             4 bytes   │
+│ n_tensors u64                      │
+│ n_kv      u64                      │
+├────────────────────────────────────┤
+│ 中繼資料 kv 對（key, type, value）  │
+├────────────────────────────────────┤
+│ 張量資訊表（name, n_dims, dims,     │
+│             dtype, offset）         │
+├────────────────────────────────────┤
+│ padding → 對齊到 32 bytes           │  ← 硬性要求
+├────────────────────────────────────┤
+│ 張量資料區（每個張量前後也對齊 32）  │
+└────────────────────────────────────┘
+</code></pre></div>
+
+<p><strong>32 位元組對齊不是建議，是規格。</strong> GPU 與 SIMD 都靠它做向量化載入，
+不對齊會直接讀到錯的位元組。candle 的 <code>gguf_file::write</code> 內部有處理：</p>
+<div class="codehilite"><pre data-lang="rust"><span></span><code><span class="c1">// 每一段資料後面補到 32 的倍數。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">padding</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">31</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="mi">31</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">size_in_bytes</span><span class="p">)</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="7-自己動手402-個張量-一個-gguf">7. 自己動手：402 個張量 → 一個 GGUF</h2>
+<p><code>02_quantize_safetensors.rs</code> 的完整流程，五個步驟。</p>
+<h3 id="71-讀-safetensors">7.1 讀 safetensors</h3>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// 一次讀進記憶體。0.1B 是 382 MB，1.5B 是 3 GB，16 GB 都吃得下。</span>
+<span class="c1">// 更大的模型就得改用 mmap 分批處理。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">tensors</span><span class="p">:</span><span class="w"> </span><span class="nc">HashMap</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="n">Tensor</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">candle_core</span><span class="p">::</span><span class="n">safetensors</span><span class="p">::</span><span class="n">load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">args</span><span class="p">.</span><span class="n">src</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">dev</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="c1">// 依名字排序，讓輸出可重現（HashMap 的迭代順序是隨機的）。</span>
+<span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">names</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;&amp;</span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tensors</span><span class="p">.</span><span class="n">keys</span><span class="p">().</span><span class="n">collect</span><span class="p">();</span>
+<span class="n">names</span><span class="p">.</span><span class="n">sort</span><span class="p">();</span>
+</code></pre></div>
+
+<h3 id="72-決定每個張量的型別">7.2 決定每個張量的型別</h3>
+<p>這是整個流程唯一需要判斷力的地方：</p>
+<div class="codehilite"><pre data-lang="rust"><span></span><code><span class="k">fn</span><span class="w"> </span><span class="nf">pick_dtype</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">shape</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="p">[</span><span class="kt">usize</span><span class="p">],</span><span class="w"> </span><span class="n">default</span><span class="p">:</span><span class="w"> </span><span class="nc">GgmlDType</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">GgmlDType</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 只看二維張量。一維（LayerNorm）與三維（x_r/x_w 之類）元素太少，</span>
+<span class="w">    </span><span class="c1">// 量化省不下空間，反而增加解量化開銷。</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">shape</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">GgmlDType</span><span class="p">::</span><span class="n">F16</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// 最後一維必須能被區塊大小整除，否則量化函式直接報錯。</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">last</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">*</span><span class="n">shape</span><span class="p">.</span><span class="n">last</span><span class="p">().</span><span class="n">unwrap</span><span class="p">();</span>
+
+<span class="w">    </span><span class="c1">// 詞嵌入與輸出頭特別敏感：embedding 是查表（誤差不會被平均掉），</span>
+<span class="w">    </span><span class="c1">// head 直接決定 logits。這兩者一律給更高精度。</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">is_sensitive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">name</span><span class="p">.</span><span class="n">contains</span><span class="p">(</span><span class="s">&quot;emb.weight&quot;</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">name</span><span class="p">.</span><span class="n">contains</span><span class="p">(</span><span class="s">&quot;head.weight&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">is_sensitive</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Q6_K 需要 256 的倍數；65536 與 768 都滿足。</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="n">last</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">256</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">GgmlDType</span><span class="p">::</span><span class="n">Q6K</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="c1">// 退一步用 Q8_0（只需要 32 的倍數）。</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">GgmlDType</span><span class="p">::</span><span class="n">Q8_0</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 一般張量：檢查能不能被目標型別的區塊大小整除。</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">last</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="n">default</span><span class="p">.</span><span class="n">block_size</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 不能整除就退回 F16。Q4_K 的 256 很嚴格，</span>
+<span class="w">        </span><span class="c1">// 所以 w1/g1 這類小矩陣（最後一維 64/128）在 Q4_K 下必然落到這裡。</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">GgmlDType</span><span class="p">::</span><span class="n">F16</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// 一切合格，用使用者指定的型別。</span>
+<span class="w">    </span><span class="n">default</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="73-量化">7.3 量化</h3>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// QTensor::quantize 內部會先 to_dtype(F32) 再 flatten_all()，</span>
+<span class="c1">// 所以 BF16 → 量化的過程不會有額外的精度損失。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">qt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QTensor</span><span class="p">::</span><span class="n">quantize</span><span class="p">(</span><span class="n">t</span><span class="p">,</span><span class="w"> </span><span class="n">dtype</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="c1">// 累計統計，最後印型別分佈。</span>
+<span class="n">stats</span><span class="p">.</span><span class="n">entry</span><span class="p">(</span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;{dtype:?}&quot;</span><span class="p">)).</span><span class="n">or_insert</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)).</span><span class="mi">1</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">qt</span><span class="p">.</span><span class="n">storage_size_in_bytes</span><span class="p">();</span>
+</code></pre></div>
+
+<h3 id="74-組中繼資料">7.4 組中繼資料</h3>
+<p>這些 key 不是查文件抄的，是從你那份 2.9B GGUF 的 header 一個一個對出來的：</p>
+<div class="codehilite"><pre data-lang="rust"><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">meta</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="p">(</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="n">Value</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="fm">vec!</span><span class="p">[</span>
+<span class="w">    </span><span class="c1">// 架構名稱，llama.cpp 靠它選載入器。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;general.architecture&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="nb">String</span><span class="p">(</span><span class="s">&quot;rwkv7&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">())),</span>
+<span class="w">    </span><span class="c1">// 檔案類型標記，固定 model。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;general.type&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="nb">String</span><span class="p">(</span><span class="s">&quot;model&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">())),</span>
+<span class="w">    </span><span class="c1">// 上下文長度。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.context_length&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="n">args</span><span class="p">.</span><span class="n">ctx</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// 隱藏維度。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.embedding_length&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="n">args</span><span class="p">.</span><span class="n">hidden</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u64</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// 層數。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.block_count&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="n">args</span><span class="p">.</span><span class="n">layers</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u64</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// LayerNorm 的 eps。candle 的 rwkv_v7 寫死 1e-5，這裡必須一致。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.attention.layer_norm_epsilon&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">F32</span><span class="p">(</span><span class="mf">1e-5</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// 每個注意力頭的維度。G1 全系列都是 64。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.wkv.head_size&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="mi">64</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// RWKV-7 特有的低秩分解維度，載入器要靠它們推形狀。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.attention.decay_lora_rank&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="mi">64</span><span class="p">)),</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.attention.iclr_lora_rank&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="mi">64</span><span class="p">)),</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.attention.value_residual_mix_lora_rank&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="mi">32</span><span class="p">)),</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.attention.gate_lora_rank&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">(</span><span class="mi">128</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// FFN 中間維度 = hidden × 4。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;rwkv7.feed_forward_length&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U64</span><span class="p">((</span><span class="n">args</span><span class="p">.</span><span class="n">hidden</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u64</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// 量化格式版本，2 是現行版本。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;general.quantization_version&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U32</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span>
+<span class="w">    </span><span class="c1">// 檔案類型編號：7 = Q8_0、12 = Q4_K、14 = Q6_K。</span>
+<span class="w">    </span><span class="p">(</span><span class="s">&quot;general.file_type&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="n">Value</span><span class="p">::</span><span class="n">U32</span><span class="p">(</span><span class="mi">7</span><span class="p">)),</span>
+<span class="p">];</span>
+</code></pre></div>
+
+<h3 id="75-寫檔">7.5 寫檔</h3>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// 建立輸出檔。BufWriter 是因為 GGUF 是一堆小片段連續寫。</span>
+<span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BufWriter</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="n">File</span><span class="p">::</span><span class="n">create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">args</span><span class="p">.</span><span class="n">dst</span><span class="p">)</span><span class="o">?</span><span class="p">);</span>
+
+<span class="c1">// candle 的 write 要求 &amp;[(&amp;str, &amp;Value)] 與 &amp;[(&amp;str, &amp;QTensor)]，</span>
+<span class="c1">// 所以先做兩層借用視圖。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">meta_refs</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="p">(</span><span class="o">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Value</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">meta</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="o">|</span><span class="w"> </span><span class="p">(</span><span class="n">k</span><span class="p">.</span><span class="n">as_str</span><span class="p">(),</span><span class="w"> </span><span class="n">v</span><span class="p">)).</span><span class="n">collect</span><span class="p">();</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">tensor_refs</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="p">(</span><span class="o">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QTensor</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span>
+<span class="w">    </span><span class="n">quantized</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="o">|</span><span class="w"> </span><span class="p">(</span><span class="n">k</span><span class="p">.</span><span class="n">as_str</span><span class="p">(),</span><span class="w"> </span><span class="n">v</span><span class="p">)).</span><span class="n">collect</span><span class="p">();</span>
+
+<span class="c1">// 真正寫入。內部會自動做 32 位元組對齊。</span>
+<span class="n">gguf_file</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">file</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">meta_refs</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">tensor_refs</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="76-實測結果">7.6 實測結果</h3>
+<div class="codehilite"><pre data-lang="text"><span></span><code>$ 02_quantize_safetensors --dtype q8_0
+讀入 402 個張量，耗時 1.2s
+型別分佈：
+  F16     220 個張量    330.00 KiB
+  Q6K       2 個張量     78.75 MiB
+  Q8_0    180 個張量     91.45 MiB
+原始   364.50 MiB
+輸出   170.55 MiB
+壓縮比 2.14x
+總耗時 5.2s
+
+$ 02_quantize_safetensors --dtype q4k
+  F16     280 個張量      5.40 MiB
+  Q4K     120 個張量     46.99 MiB
+  Q6K       2 個張量     78.75 MiB
+原始   364.50 MiB
+輸出   131.16 MiB
+壓縮比 2.78x
+總耗時 7.0s
+</code></pre></div>
+
+<p><strong>這裡有個讓人失望但很重要的事實：Q4_K 只有 2.78x，不是理論上的 7x。</strong></p>
+<p>拆開來看（<code>03_inspect_gguf</code> 對自製 Q4_K 檔案的區塊統計）：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>  型別分佈：
+    F16      280 個      5.40 MiB  (4.1%)
+    Q4K      120 個     46.99 MiB  (35.8%)
+    Q6K        2 個     78.75 MiB  (60.1%)
+
+  區塊分佈：
+    blocks          52.39 MiB  (39.9%)
+    emb             39.38 MiB  (30.0%)
+    head            39.38 MiB  (30.0%)
+</code></pre></div>
+
+<p>兩個原因：</p>
+<ol>
+<li><strong>emb + head 佔了 60.1%。</strong> 它們被刻意留在 Q6_K，因為這兩個張量最敏感。
+   你把它們也壓到 Q4_K，檔案會變成 ~90 MiB（3.9x），但模型會明顯變笨。</li>
+<li><strong>Q4_K 對小矩陣不友善。</strong> <code>w1</code> 是 [768, 64]、<code>g1</code> 是 [768, 128]，
+   最後一維不是 256 的倍數，只能留 F16。12 層 × 4 個這種張量，白送 5.4 MiB。
+   注意 Q8_0 版本只有 220 個 F16（330 KiB），因為 32 的倍數寬鬆得多。</li>
+</ol>
+<p><strong>這就是為什麼 llama.cpp 的 Q4_K_M 是「混合」而不是「全部 Q4_K」</strong>：
+大矩陣壓 4 bit，小矩陣與敏感張量留高精度。你剛才手寫的 <code>pick_dtype</code> 就是這個邏輯的簡化版。</p>
+<hr />
+<h2 id="8-三個坑">8. 三個坑</h2>
+<h3 id="坑一形狀-佈局k-quant-只認最後一維">坑一：形狀 ≠ 佈局，K-quant 只認最後一維</h3>
+<p><code>QTensor::quantize</code> 會把張量攤平再切區塊，所以「768×64 攤平後 49152 能被 256 整除」
+在數學上是成立的——但這會產生一個 <strong>llama.cpp 讀不動的 GGUF</strong>。</p>
+<p>llama.cpp 的 K-quant 解量化 kernel 假設「每一列是獨立的區塊序列」，
+所以硬性要求 <code>最後一維 % 256 == 0</code>。candle 不管這件事，因為它自己的 kernel 就是攤平處理的。</p>
+<p><strong>結論</strong>：<code>pick_dtype</code> 裡那句 <code>if last % default.block_size() != 0 { return F16 }</code> 不是保險，
+是必要的正確性檢查。</p>
+<h3 id="坑二張量名稱是方言不是標準">坑二：張量名稱是方言，不是標準</h3>
+<p>這是本章最重要的一個發現。你那份 2.9B GGUF 裡的張量叫 <code>blk.0.time_mix_value.weight</code>；
+你的 safetensors 裡同一個權重叫 <code>blocks.0.att.value.weight</code>。對照表：</p>
+<table>
+<thead>
+<tr>
+<th>candle safetensors</th>
+<th>llama.cpp GGUF</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>emb.weight</code></td>
+<td><code>token_embd.weight</code></td>
+</tr>
+<tr>
+<td><code>head.weight</code></td>
+<td><code>output.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.ln0</code></td>
+<td><code>token_embd_norm</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.ln1</code></td>
+<td><code>blk.N.attn_norm</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.ln2</code></td>
+<td><code>blk.N.attn_norm_2</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.receptance.weight</code></td>
+<td><code>blk.N.time_mix_receptance.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.key.weight</code></td>
+<td><code>blk.N.time_mix_key.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.value.weight</code></td>
+<td><code>blk.N.time_mix_value.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.output.weight</code></td>
+<td><code>blk.N.time_mix_output.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.ln_x</code></td>
+<td><code>blk.N.time_mix_ln</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.x_r/x_w/x_k/x_v/x_a/x_g</code></td>
+<td><code>blk.N.time_mix_lerp_fused</code>（六個融成一個）</td>
+</tr>
+<tr>
+<td><code>blocks.N.att.w0/w1/w2</code></td>
+<td><code>blk.N.time_mix_w0/w1/w2</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.a0/a1/a2</code></td>
+<td><code>blk.N.time_mix_a0/a1/a2</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.att.v0/v1/v2</code></td>
+<td><code>blk.N.time_mix_v0/v1/v2</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.ffn.key.weight</code></td>
+<td><code>blk.N.channel_mix_key.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.ffn.value.weight</code></td>
+<td><code>blk.N.channel_mix_value.weight</code></td>
+</tr>
+<tr>
+<td><code>blocks.N.ffn.x_k</code></td>
+<td><code>blk.N.channel_mix_lerp_k</code></td>
+</tr>
+<tr>
+<td><code>ln_out</code></td>
+<td><code>output_norm</code></td>
+</tr>
+</tbody>
+</table>
+<p>兩個後果：</p>
+<ol>
+<li><strong>你那份 2.9B Q8_0 丟給 candle 的 <code>VarBuilder::from_gguf</code> 會失敗</strong>，
+   因為它會去找 <code>blocks.0.att.receptance.weight</code>。必須先寫一層名稱映射。</li>
+<li><strong>用本文產出的 GGUF 丟給 llama.cpp 也讀不動</strong>，除了名字不對，還缺詞表。</li>
+</ol>
+<p>那個「六個 <code>x_*</code> 融成一個 <code>time_mix_lerp_fused</code>」的設計值得注意：
+llama.cpp 把六個 <code>[1,1,c]</code> 的向量拼成一個 <code>[c,1,1,6]</code> 張量，
+一次載入、一次算完，減少六次 kernel launch。這是推論引擎為了速度做的重排，
+代價就是「權重檔案不能互換」。</p>
+<h3 id="坑三缺詞表">坑三：缺詞表</h3>
+<p>candle 的 <code>quantized_var_builder::from_gguf</code> 只讀張量，不讀詞表，
+所以本文產出的 GGUF 給 candle 用完全沒問題。但 llama.cpp 需要：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code>tokenizer.ggml.model      = &quot;rwkv&quot;
+tokenizer.ggml.tokens     = [65536 個字串]
+tokenizer.ggml.token_type = [65536 個 i32]
+tokenizer.ggml.bos_token_id = 0
+tokenizer.ggml.eos_token_id = 0
+tokenizer.ggml.eot_token_id = 261
+tokenizer.chat_template   = &quot;...&quot;
+</code></pre></div>
+
+<p><code>tokenizer.ggml.tokens</code> 從你模型目錄下的 <code>rwkv_vocab_v20230424.json</code> 讀出來填進去就好，
+但那會讓檔案多約 1.5 MB，而且寫 65536 個字串會讓 <code>gguf_file::write</code> 慢上幾秒。
+本章刻意不做——因為<strong>教學重點在張量，不在詞表</strong>，而且 candle 根本不需要它。</p>
+<hr />
+<h2 id="9-與-deepseekqwen-的連線">9. 與 DeepSeek、Qwen 的連線</h2>
+<p>量化這件事，各家模型的難點完全不同。把上面學到的東西接到你熟悉的大陸模型上：</p>
+<h3 id="qwen-的-gqa為什麼量化收益跟-llama-不一樣">Qwen 的 GQA：為什麼量化收益跟 Llama 不一樣</h3>
+<p>Qwen2.5 / Qwen3 用 GQA（grouped-query attention），KV 頭數遠少於 Q 頭數。
+結果是：<strong>KV 投影矩陣比 Llama 小，FFN 佔的比例更大</strong>。
+所以 Qwen 系列量化後，<code>ffn</code> 那幾個張量是主要受益者，而 attention 部分省不下多少。</p>
+<p>對照 RWKV-7：它根本沒有 KV cache，<code>att</code> 只有 receptance / key / value / output 四個
+<code>[c, c]</code> 矩陣，其餘全是低秩分解（<code>w1/w2</code> 是 <code>[c,64]</code> 與 <code>[64,c]</code>）。
+所以 RWKV-7 的量化收益幾乎全在 <strong>emb + head + ffn</strong> 上——這正是第七節量到的 60.1%。</p>
+<h3 id="deepseek-的-moe量化難點在每個-expert-都很小">DeepSeek 的 MoE：量化難點在「每個 expert 都很小」</h3>
+<p>DeepSeek-V2/V3 是 MoE，一個 671B 的模型裡有 256 個 routed expert，每個只有約 2B。
+量化時會遇到兩個新問題：</p>
+<ol>
+<li><strong>expert 之間的權重分佈差異很大。</strong> 用同一個 scale 處理所有 expert 會讓某些 expert 失真。
+   實務做法是 per-expert 量化，也就是回到本文第四節的結論：<strong>限制污染半徑</strong>。</li>
+<li><strong>路由權重不能量化。</strong> gate 的輸出決定選哪個 expert，一點誤差就會讓整個 token 走錯路。
+   所以 gate 一律留 F32——這跟你那份 2.9B GGUF 把 <code>time_mix_lerp_fused</code> 留 F32 是同一個邏輯。</li>
+</ol>
+<p>candle 對這件事有專門的 API：</p>
+<div class="codehilite"><pre data-lang="text"><span></span><code><span class="c1">// 每個 token 走不同的 expert，所以不能整體 matmul。</span>
+<span class="c1">// indexed_moe_forward 接受 expert id 清單，內部做 gather + 分組 GEMM。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qt</span><span class="p">.</span><span class="n">indexed_moe_forward</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">expert_ids</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="imatrix把位元花在刀口上">imatrix：把位元花在刀口上</h3>
+<p>llama.cpp 的 <code>--imatrix</code> 是這個思路的極致：先跑一批校準資料，
+統計每個「輸入通道」對輸出的重要程度，然後在量化時給重要通道更高權重。</p>
+<p>candle 直接支援：</p>
+<div class="codehilite"><pre data-lang="rust"><span></span><code><span class="c1">// imatrix_weights 的長度必須等於張量的最後一維（每個輸入通道一個權重）。</span>
+<span class="c1">// 內部會用這些權重去調整每個區塊的縮放係數。</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">qt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QTensor</span><span class="p">::</span><span class="n">quantize_imatrix</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">imatrix_weights</span><span class="p">,</span><span class="w"> </span><span class="n">GgmlDType</span><span class="p">::</span><span class="n">Q4K</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+
+<p><code>imatrix_file::load_imatrix(path)</code> 可以直接讀 llama.cpp 產生的 <code>.imatrix</code> 檔。
+如果你哪天想把自己微調過的模型壓到 Q4_K 又不想掉太多品質，這是標準做法。</p>
+<hr />
+<h2 id="10-練習">10. 練習</h2>
+<ol>
+<li><strong>改 <code>pick_dtype</code>，把 emb/head 也壓到 Q4_K</strong>，重跑，看檔案縮到多少。
+   然後用 <code>03_inspect_gguf</code> 反量化 <code>emb.weight</code>，比較前 8 個值跟 Q6_K 版本的差異。</li>
+<li><strong>寫一個名稱映射函式</strong>，把 llama.cpp 方言轉成 candle 方言（或反之），
+   讓 <code>03_inspect_gguf</code> 能直接吃任何一種 GGUF。</li>
+<li><strong>量 1.5B</strong>：<code>--src 1.5b --dtype q4k</code>，比較壓縮率與耗時。
+   注意 1.5B 的 <code>w1</code> 是 <code>[2048, 64]</code>，最後一維一樣是 64，所以還是會落到 F16。</li>
+<li><strong>算一筆帳</strong>：如果 Q4_K 的理論值是 4.5 bit，0.1B 的 191M 參數應該是多少 MiB？
+   跟實測的 131.16 MiB 差多少？差的那部分從哪來？</li>
+</ol>
+<hr />
+<p><strong>下一份</strong>：<a href="02-微調.md">文件二：微調</a> — 從 VarMap 到 LoRA，在 6 GB 顯存上跑起來。</p>
+<div class="pager"><a href="index.html">← 首頁</a><a href="02-微調.html">文件二 · 微調 →</a></div>
+    </article>
+  </main>
+</div>
+<button id="totop">↑</button>
+<script>
+// 1. 為每個程式碼區塊加上「語言標籤 + 複製按鈕」。
+document.querySelectorAll('pre').forEach(function(pre){
+  var code = pre.querySelector('code');
+  if(!code) return;
+  // 語言名由 Python 端寫在 data-lang 上（見 build_html.py 的說明）。
+  var lang = pre.getAttribute('data-lang') || 'text';
+  // 純文字區塊多半是終端輸出，標成 output 比 text 直觀。
+  if(lang === 'text' || lang === 'plaintext'){ lang = 'output'; }
+  // 外層容器。
+  var box = document.createElement('div');
+  box.className = 'codeblock';
+  pre.parentNode.insertBefore(box, pre);
+  // 標題列。
+  var bar = document.createElement('div');
+  bar.className = 'bar';
+  var label = document.createElement('span');
+  label.textContent = lang;
+  var btn = document.createElement('button');
+  btn.className = 'copy';
+  btn.textContent = '複製';
+  bar.appendChild(label); bar.appendChild(btn);
+  box.appendChild(bar);
+  box.appendChild(pre);
+  // 複製行為。
+  btn.addEventListener('click', function(){
+    navigator.clipboard.writeText(code.innerText).then(function(){
+      btn.textContent = '已複製'; btn.classList.add('done');
+      setTimeout(function(){ btn.textContent='複製'; btn.classList.remove('done'); }, 1400);
+    });
+  });
+});
+
+// 2. 表格外包一層，讓寬表格可以橫向捲動而不撐破版面。
+document.querySelectorAll('article table').forEach(function(t){
+  var w = document.createElement('div');
+  w.className = 'table-scroll';
+  t.parentNode.insertBefore(w, t);
+  w.appendChild(t);
+});
+
+// 3. 側欄目錄的滾動高亮。
+var links = Array.prototype.slice.call(document.querySelectorAll('aside a[href^="#"]'));
+var targets = links.map(function(a){
+  return document.getElementById(decodeURIComponent(a.getAttribute('href').slice(1)));
+});
+function spy(){
+  var pos = window.scrollY + 90, best = 0;
+  for(var i=0;i<targets.length;i++){
+    if(targets[i] && targets[i].offsetTop <= pos) best = i;
+  }
+  links.forEach(function(a,i){ a.classList.toggle('active', i===best); });
+}
+window.addEventListener('scroll', spy, {passive:true});
+spy();
+
+// 4. 回到頂端。
+var top = document.getElementById('totop');
+window.addEventListener('scroll', function(){
+  top.classList.toggle('show', window.scrollY > 600);
+}, {passive:true});
+top.addEventListener('click', function(){ window.scrollTo({top:0,behavior:'smooth'}); });
+</script>
+</body>
+</html>

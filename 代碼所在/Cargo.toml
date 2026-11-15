@@ -1,0 +1,41 @@
+[package]
+name = "candle-quant-tutorial"
+version = "0.1.0"
+edition = "2021"
+
+# 五個獨立可執行檔，對應文件裡的五個實作段落。
+# cargo run --release --bin 01_qtensor_basics 這樣呼叫。
+[[bin]]
+name = "01_qtensor_basics"
+path = "src/bin/01_qtensor_basics.rs"
+
+[[bin]]
+name = "02_quantize_safetensors"
+path = "src/bin/02_quantize_safetensors.rs"
+
+[[bin]]
+name = "03_inspect_gguf"
+path = "src/bin/03_inspect_gguf.rs"
+
+[[bin]]
+name = "04_train_full"
+path = "src/bin/04_train_full.rs"
+
+[[bin]]
+name = "05_lora_math"
+path = "src/bin/05_lora_math.rs"
+
+[dependencies]
+anyhow = "1"
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+candle-transformers = "0.11.0"
+
+[features]
+# 預設不開 CUDA：量化章節全部在 CPU 上跑，不需要 nvcc 就能編譯。
+# 要跑第 04 章（微調）時再加 --features cuda。
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+
+[profile.release]
+opt-level = 3
